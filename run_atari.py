@@ -6,13 +6,17 @@ from baselines import bench
 import argparse
 from baselines import logger
 from baselines.common.atari_wrappers import make_atari
-import model
+# import model
 from config import *
+from model.cnn_to_mlp import cnn_to_mlp
+from model.cnn_to_lstm import cnn_to_lstm
+from model.mlp import mlp
 
 def main():
 
     model_choices = ["atari_deepmind",
-                     "lstm_model"]
+                     "lstm_model",
+                     "mlp"]
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--env", help="environment ID", default="BreakoutNoFrameskip-v4")
     parser.add_argument("--seed", help="RNG seed", type=int, default=0)
@@ -28,7 +32,7 @@ def main():
     parser.add_argument("--learning-starts", type=int, default=int(1e4))
     parser.add_argument("--target_network_update_freq", type=int, default=int(1e3))
     parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--model", type=str, choices = model_choices, default="lstm_model", )
+    parser.add_argument("--model", type=str, choices = model_choices, default="atari_deepmind")
     args = parser.parse_args()
 
     logger.configure(log_dir)
@@ -38,45 +42,32 @@ def main():
     env = bench.Monitor(env, logger.get_dir())
     env = deepq.wrap_atari_dqn(env)
 
-    if args.model == "atari_deepmind":
-        atari_deepmind_model = model.cnn_to_mlp(convs=[(16, 8, 4), (32, 4, 2)],
+    if args.model == "mlp":
+        model = mlp(hiddens=[256, 256])
+    elif args.model == "atari_deepmind":
+        model = cnn_to_mlp(convs=[(16, 8, 4), (32, 4, 2)],
                                                 hiddens=[256],
                                                 duelings=bool(args.dueling))
-
-        act = deepq.learn(
-            env,
-            q_func=atari_deepmind_model,
-            lr=args.learning_rate,
-            max_timesteps=args.num_timesteps,
-            buffer_size=int(args.buffer_size),
-            exploration_fraction=(args.exploration_steps/args.num_timesteps),
-            exploration_final_eps=args.exploration_final_eps,
-            train_freq=args.train_freq,
-            learning_starts=int(args.learning_rate),
-            target_network_update_freq=int(args.target_network_update_freq),
-            gamma=args.gamma,
-            prioritized_replay=bool(args.prioritized)
-        )
     elif args.model == "lstm_model":
-        lstm_model = model.cnn_to_lstm(convs=[(16, 8, 4), (32, 4, 2)],
-                                       lstm_cell_size=512,
-                                       hiddens=[512, 256],
-                                       batch_size=32,
-                                       dueling=bool(args.dueling))
-        act = deepq.learn(
-            env,
-            q_func=lstm_model,
-            lr=args.learning_rate,
-            max_timesteps=args.num_timesteps,
-            buffer_size=int(args.buffer_size),
-            exploration_fraction=(args.exploration_steps / args.num_timesteps),
-            exploration_final_eps=args.exploration_final_eps,
-            train_freq=args.train_freq,
-            learning_starts=int(args.learning_rate),
-            target_network_update_freq=int(args.target_network_update_freq),
-            gamma=args.gamma,
-            prioritized_replay=bool(args.prioritized)
-        )
+        model = cnn_to_lstm(convs=[(16, 8, 4), (32, 4, 2)],
+                                 lstm_cell_size=512,
+                                 hiddens=[512, 256],
+                                 batch_size=32,
+                                 dueling=bool(args.dueling))
+    act = deepq.learn(
+        env,
+        q_func=model,
+        lr=args.learning_rate,
+        max_timesteps=args.num_timesteps,
+        buffer_size=int(args.buffer_size),
+        exploration_fraction=(args.exploration_steps / args.num_timesteps),
+        exploration_final_eps=args.exploration_final_eps,
+        train_freq=args.train_freq,
+        learning_starts=int(args.learning_rate),
+        target_network_update_freq=int(args.target_network_update_freq),
+        gamma=args.gamma,
+        prioritized_replay=bool(args.prioritized)
+    )
 
     f = open(os.path.join(log_dir, "README.me"), "w")
     f.write("\tenv \t{}\n".format(args.env))

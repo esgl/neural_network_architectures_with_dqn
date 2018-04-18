@@ -67,16 +67,25 @@ def _cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, duelings, inpt, num
                                            kernel_size=kernel_size,
                                            stride=stride,
                                            activation_fn=tf.nn.relu)
-            convs_out = layers.flatten(out)
+
+            # convs_out = layers.flatten(out)
+            print("type(out):", type(out))
+            print("out.shape", out.get_shape().as_list())
+            print("shape[1]", out.get_shape().as_list()[3])
+            print("shape[2]", out.get_shape().as_list()[1] * out.get_shape().as_list()[2])
+            out_shape = out.get_shape().as_list()
+            convs_out = tf.reshape(out, [-1, out_shape[3], out_shape[1] * out_shape[2]])
+            print("type(convs_out):", type(convs_out))
+            print("convs_out.shape", convs_out.get_shape().as_list())
 
         with tf.variable_scope("lstm"):
             lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(lstm_cell_size, forget_bias=1.0, state_is_tuple=True)
             with tf.variable_scope("initial_state"):
-                cell_init_state = lstm_cell.zero_state(batch_size=batch_size,
+                cell_init_state = lstm_cell.zero_state(batch_size=out_shape[0],
                                                        dtype=tf.float32)
             cell_outputs, cell_final_state = tf.nn.dynamic_rnn(
                 cell=lstm_cell,
-                inputs=out,
+                inputs=convs_out,
                 initial_state=cell_init_state,
                 time_major=True
             )
@@ -112,6 +121,7 @@ def _cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, duelings, inpt, num
             q_out = state_score + action_scores_centered
         else:
             q_out = action_scores
+        print("q_out.shape", q_out.get_shape().as_list())
         return q_out
 
 def cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, dueling=False, layer_norm=False):
