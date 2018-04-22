@@ -5,6 +5,8 @@ import tensorflow as tf
 def _cnn_to_mpl(convs, hiddens, dueling, inpt, num_actions, scope, reuse=False, layer_norm=False):
     with tf.variable_scope(scope, reuse=reuse):
         out=inpt
+        out_shape = out.get_shape().as_list()
+        print("out_shape: ", out_shape)
         with tf.variable_scope("convnet"):
             for num_outputs, kernel_size, stride in convs:
                 out = layers.convolution2d(out,
@@ -12,6 +14,8 @@ def _cnn_to_mpl(convs, hiddens, dueling, inpt, num_actions, scope, reuse=False, 
                                            kernel_size=kernel_size,
                                            stride=stride,
                                            activation_fn=tf.nn.relu)
+                out_shape = out.get_shape().as_list()
+                print("out_shape: ", out_shape)
         conv_out = layers.flatten(out)
 
         with tf.variable_scope("action_value"):

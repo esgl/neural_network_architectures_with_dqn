@@ -11,12 +11,16 @@ from config import *
 from model.cnn_to_mlp import cnn_to_mlp
 from model.cnn_to_lstm import cnn_to_lstm
 from model.mlp import mlp
+from model.lstm_to_mlp import lstm_to_mlp
+from model.cnn_to_lstm_new import cnn_to_lstm_new
 
 def main():
 
     model_choices = ["atari_deepmind",
-                     "lstm_model",
-                     "mlp"]
+                     "cnn_to_lstm",
+                     "mlp",
+                     "lstm_to_mlp",
+                     "cnn_to_lstm_new"]
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--env", help="environment ID", default="BreakoutNoFrameskip-v4")
     parser.add_argument("--seed", help="RNG seed", type=int, default=0)
@@ -24,7 +28,7 @@ def main():
     parser.add_argument("--dueling", type=int, default=1)
     parser.add_argument("--num-timesteps", type=int, default=int(5*10e2))
     parser.add_argument("--learning-rate", type=float, default=1e-4)
-
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--buffer-size", type=int, default=int(1e6))
     parser.add_argument("--exploration_steps", type=float, default=1e6)
     parser.add_argument("--exploration_final_eps", type=float, default=0.1)
@@ -32,7 +36,7 @@ def main():
     parser.add_argument("--learning-starts", type=int, default=int(1e4))
     parser.add_argument("--target_network_update_freq", type=int, default=int(1e3))
     parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--model", type=str, choices = model_choices, default="atari_deepmind")
+    parser.add_argument("--model", type=str, choices = model_choices, default="cnn_to_lstm_new")
     args = parser.parse_args()
 
     logger.configure(log_dir)
@@ -48,12 +52,27 @@ def main():
         model = cnn_to_mlp(convs=[(16, 8, 4), (32, 4, 2)],
                                                 hiddens=[256],
                                                 duelings=bool(args.dueling))
-    elif args.model == "lstm_model":
+    elif args.model == "cnn_to_lstm":
         model = cnn_to_lstm(convs=[(16, 8, 4), (32, 4, 2)],
-                                 lstm_cell_size=512,
-                                 hiddens=[512, 256],
-                                 batch_size=32,
-                                 dueling=bool(args.dueling))
+                            lstm_hidden_size=512,
+                            lstm_out_size=256,
+                            hiddens=[256, 128],
+                            batch_size=int(args.batch_size),
+                            duelings=bool(args.dueling))
+    elif args.model == "cnn_to_lstm_new":
+        model = cnn_to_lstm_new(convs=[(16, 8, 4), (32, 4, 2)],
+                            lstm_hidden_size=512,
+                            lstm_out_size=256,
+                            hiddens=[256, 128],
+                            batch_size=int(args.batch_size),
+                            duelings=bool(args.dueling))
+    elif args.model == "lstm_to_mlp":
+        model = lstm_to_mlp(lstm_hidden_size=512,
+                            lstm_out_size=256,
+                            hiddens=[256, 128],
+                            batch_size=int(args.batch_size),
+                            duelings=bool(args.dueling))
+
     act = deepq.learn(
         env,
         q_func=model,
@@ -63,6 +82,7 @@ def main():
         exploration_fraction=(args.exploration_steps / args.num_timesteps),
         exploration_final_eps=args.exploration_final_eps,
         train_freq=args.train_freq,
+        batch_size=int(args.batch_size),
         learning_starts=int(args.learning_rate),
         target_network_update_freq=int(args.target_network_update_freq),
         gamma=args.gamma,
@@ -75,6 +95,7 @@ def main():
     f.write("\tprioritized\t{}\n".format(args.prioritized))
     f.write("\tdueling\t{}\n".format(args.dueling))
     f.write(("\tlearning rate\t{}\n".format(args.learning_rate)))
+    f.write(("\tbatch size\t{}\n").format(args.batch_size))
     f.write("\tmax timestep\t{}\n".format(args.num_timesteps))
     f.write("\tbuffer size\t{}\n".format(args.buffer_size))
     f.write("\texploration fraction\t{}\n".format(args.exploration_steps/args.num_timesteps))

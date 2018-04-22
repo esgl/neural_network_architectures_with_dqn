@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.contrib import layers
 
-def _cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, duelings, inpt, num_actions, scope, reuse=False, layer_norm=False):
+def _cnn_to_lstm(convs, lstm_hidden_size, lstm_out_size, hiddens, batch_size, duelings, inpt, num_actions, scope, reuse=False, layer_norm=False):
     with tf.variable_scope(scope, reuse=reuse):
         out = inpt
         with tf.variable_scope("convnet"):
@@ -12,29 +12,43 @@ def _cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, duelings, inpt, num
                                            stride=stride,
                                            activation_fn=tf.nn.relu)
 
-            # convs_out = layers.flatten(out)
-            print("type(out):", type(out))
-            print("out.shape", out.get_shape().as_list())
-            print("shape[1]", out.get_shape().as_list()[3])
-            print("shape[2]", out.get_shape().as_list()[1] * out.get_shape().as_list()[2])
-            out_shape = out.get_shape().as_list()
-            convs_out = tf.reshape(out, [-1, out_shape[3], out_shape[1] * out_shape[2]])
-            print("type(convs_out):", type(convs_out))
-            print("convs_out.shape", convs_out.get_shape().as_list())
+
 
         with tf.variable_scope("lstm"):
-            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(lstm_cell_size, forget_bias=1.0, state_is_tuple=True)
-            with tf.variable_scope("initial_state"):
-                cell_init_state = lstm_cell.zero_state(batch_size=out_shape[0],
+            out_shape = out.get_shape().as_list()
+            n_steps = out_shape[3]
+            n_inputs = out_shape[1] * out_shape[2]
+            convs_out = tf.reshape(out, [-1, n_steps, n_inputs])
+
+            print("convs_out.shape: {}".format(convs_out.get_shape().as_list()))
+            with tf.variable_scope("weights"):
+                weights = {
+                    "in": tf.Variable(tf.random_normal([n_inputs, lstm_hidden_size])),
+                    "out": tf.Variable(tf.random_normal([lstm_hidden_size, lstm_out_size]))
+                }
+            with tf.variable_scope("biases"):
+                biases = {
+                    "in": tf.constant(0.1, shape=[lstm_hidden_size, ]),
+                    "out": tf.constant(0.1, shape=[lstm_out_size, ])
+                }
+            lstm_in = tf.reshape(convs_out, [-1, n_inputs])
+            print("lstm_in.shape: {}".format(lstm_in.get_shape().as_list()))
+            lstm_in = tf.matmul(lstm_in, weights["in"]) + biases["in"]
+            lstm_in = tf.reshape(lstm_in, [-1, n_steps, lstm_hidden_size])
+            print("lstm_in.shape: {}".format(lstm_in.get_shape().as_list()))
+
+            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(lstm_hidden_size, forget_bias=1.0, state_is_tuple=True)
+            cell_init_state = lstm_cell.zero_state(batch_size=batch_size,
                                                        dtype=tf.float32)
             cell_outputs, cell_final_state = tf.nn.dynamic_rnn(
                 cell=lstm_cell,
-                inputs=convs_out,
+                inputs=lstm_in,
                 initial_state=cell_init_state,
-                time_major=True
+                time_major=False
             )
+            out = tf.unstack(tf.transpose(cell_outputs, [1, 0, 2]))
+            out = tf.matmul(out[-1], weights["out"]) + biases["out"]
 
-            out = cell_final_state
         with tf.variable_scope("action_value"):
             action_out = out
             for hidden in hiddens:
@@ -65,14 +79,14 @@ def _cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, duelings, inpt, num
             q_out = state_score + action_scores_centered
         else:
             q_out = action_scores
-        print("q_out.shape", q_out.get_shape().as_list())
         return q_out
 
-def cnn_to_lstm(convs, lstm_cell_size, hiddens, batch_size, dueling=False, layer_norm=False):
+def cnn_to_lstm(convs, lstm_hidden_size, lstm_out_size, hiddens, batch_size, duelings=False, layer_norm=False):
     return lambda *args, **kwargs: _cnn_to_lstm(convs,
-                                                lstm_cell_size,
+                                                lstm_hidden_size,
+                                                lstm_out_size,
                                                 hiddens,
                                                 batch_size,
-                                                dueling,
+                                                duelings,
                                                 layer_norm=layer_norm,
                                                 *args, **kwargs)
